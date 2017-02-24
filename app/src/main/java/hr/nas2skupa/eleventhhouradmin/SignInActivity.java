@@ -10,6 +10,11 @@ import com.firebase.ui.auth.ErrorCodes;
 import com.firebase.ui.auth.IdpResponse;
 import com.firebase.ui.auth.ResultCodes;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import java.util.Arrays;
 
@@ -25,19 +30,23 @@ public class SignInActivity extends AppCompatActivity {
         if (auth.getCurrentUser() != null) {
             MainActivity_.intent(this).start();
         } else {
-            startActivityForResult(
-                    // Get an instance of AuthUI based on the default app
-                    AuthUI.getInstance().createSignInIntentBuilder()
-                            .setProviders(Arrays.asList(
-                                    new AuthUI.IdpConfig.Builder(AuthUI.TWITTER_PROVIDER).build(),
-                                    new AuthUI.IdpConfig.Builder(AuthUI.FACEBOOK_PROVIDER).build(),
-                                    new AuthUI.IdpConfig.Builder(AuthUI.GOOGLE_PROVIDER).build(),
-                                    new AuthUI.IdpConfig.Builder(AuthUI.EMAIL_PROVIDER).build()))
-                            .setLogo(R.drawable.logo_eng)
-                            .setTheme(R.style.SignInTheme)
-                            .build(),
-                    RC_SIGN_IN);
+            startSignInProcess();
         }
+    }
+
+    private void startSignInProcess() {
+        startActivityForResult(
+                // Get an instance of AuthUI based on the default app
+                AuthUI.getInstance().createSignInIntentBuilder()
+                        .setProviders(Arrays.asList(
+                                new AuthUI.IdpConfig.Builder(AuthUI.TWITTER_PROVIDER).build(),
+                                new AuthUI.IdpConfig.Builder(AuthUI.FACEBOOK_PROVIDER).build(),
+                                new AuthUI.IdpConfig.Builder(AuthUI.GOOGLE_PROVIDER).build(),
+                                new AuthUI.IdpConfig.Builder(AuthUI.EMAIL_PROVIDER).build()))
+                        .setLogo(R.drawable.logo_eng)
+                        .setTheme(R.style.SignInTheme)
+                        .build(),
+                RC_SIGN_IN);
     }
 
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -48,9 +57,29 @@ public class SignInActivity extends AppCompatActivity {
 
             // Successfully signed in
             if (resultCode == ResultCodes.OK) {
+                final FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                FirebaseDatabase.getInstance()
+                        .getReference("admins")
+                        .addListenerForSingleValueEvent(new ValueEventListener() {
+                            @Override
+                            public void onDataChange(DataSnapshot dataSnapshot) {
+                                if (dataSnapshot.hasChild(user.getUid())) {
+                                    MainActivity_.intent(SignInActivity.this).start();
+                                    finish();
+                                }
+                                else {
+                                    Toast.makeText(SignInActivity.this, user.getDisplayName() + " is not EleventhHour administrator!", Toast.LENGTH_LONG).show();
+                                    FirebaseAuth.getInstance().signOut();
+                                    startSignInProcess();
+                                }
+                            }
 
-                MainActivity_.intent(this).start();
-                finish();
+                            @Override
+                            public void onCancelled(DatabaseError databaseError) {
+                                FirebaseAuth.getInstance().signOut();
+                                startSignInProcess();
+                            }
+                        });
                 return;
             } else {
                 // Sign in failed
